@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+*.pem
+*.key
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local data — DO NOT COMMIT KESTREL DATA
+data/*.csv
+data/*.xlsx
+data/*.xls
+data/*.json
+data/*.parquet
+data/*.pdf
+data/*.docx
+
+# Generated/private artifacts
+models/*
+!models/.gitkeep
+
+# Generated reports can be regenerated
+reports/*
+!reports/.gitkeep
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
