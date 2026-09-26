@@ -1,373 +1,285 @@
-# Submission Form — Kestrel Routing Intelligence
+# \# Kestrel Home — Submission Form
 
-## What did you build?
+#
 
-A local, reproducible routing-intelligence system for Kestrel service requests: a calibrated linear-SVM classifier (char TF-IDF + structured features) predicting the operational team, with confidence scoring, human-readable explanations, historical-similarity evidence, a policy layer, a FastAPI service, a Streamlit operations console, temporal evaluation, error analysis, and operations/friction analytics — all runnable with no external LLM or paid API.
+# \## 1. What did you build, and what business decision does it support? State the number and the rupees.
 
-The seven canonical teams are:
+#
 
-- Installs & Demo
-- Repairs
-- Filters & Consumables
-- Billing
-- Returns & Replacement
-- Warranty Claims
-- Product Advice
+# I built a locally-run service-request routing system that predicts which of Kestrel Home's seven operational teams should handle a new request. It includes a character TF-IDF + linear classifier, confidence/review logic, human-readable explanations, similar historical cases, a JSON API, and a Streamlit UI.
 
----
+#
 
-## What business decision does this support?
+# On a chronological holdout of 2,135 requests, the model achieved 84.59% accuracy and 0.8462 macro F1 against `final\_team`, the available post-resolution outcome. The historical legacy bot achieved 77.17% accuracy against the same outcome, corresponding to a 22.83% historical misroute rate.
 
-The recommended decision is **not to switch off the legacy vendor routing bot immediately**.
+#
 
-The new model should first be run in **shadow mode for 1–2 weeks** alongside the existing bot, with human review and no production routing changes initially.
+# The business decision I support is not to switch off the legacy bot immediately, but to run the new system in a 1–2 week shadow-mode pilot before making a production replacement decision.
 
-The model reaches **84.59% accuracy against `final_team` on the chronological holdout**, compared with **77.17% for the legacy bot against the same outcome**.
+#
 
-The existing bot licence costs **₹3.2 lakh/year**. The new model has **₹0/request paid inference cost** because inference runs locally with no external LLM or paid API.
+# The legacy bot licence is ₹3.2 lakh/year. The historical misrouting analysis estimates approximately ₹18.3 lakh of transfer/contact friction over the 15 months in the supplied data, using the cost assumptions in the operations policy. The new model has ₹0 paid inference cost per request because it runs locally, although production hosting and maintenance costs would still need to be sized.
 
-The current validation evidence is sufficient to justify a controlled pilot, but not to claim that the legacy bot can safely be retired today.
+#
 
----
+# \---
 
-## What is the target label, and why?
+#
 
-`final_team` from `resolution_log.csv` (the team that actually closed the request), not `train.csv`'s `team_label` (the legacy bot's own initial decision).
+# \## 2. What score do you expect `predictions.csv` to get on the hidden outcomes, on which metric, and why that metric? Say how you estimated it.
 
-Evidence: `team_label` disagrees with `final_team` on approximately **22.8%** of rows, and for the **1,239 requests** merely mentioning a payment word, the bot sent **66% to Billing** while only **23% actually belonged there** — including the exact "paid by UPI, purifier leaking → should be Repairs" example from the assignment brief, which is also present in the training data with `team_label=Billing` and `final_team=Repairs`.
+#
 
-Training on `team_label` would reproduce the bot's own routing behaviour rather than learning from the observed resolution outcome.
+# I expect approximately 84–85% accuracy on the hidden outcomes, with accuracy as the primary metric and macro F1 as a secondary metric because there are seven routing teams and I want performance across teams to matter rather than relying only on the largest class.
 
-Full reasoning: `reports/validation_report.md` §2.
+#
 
----
+# My estimate comes from a chronological holdout that mimics the production setting better than a random split: the model trained on 8,687 earlier requests and was evaluated on 2,135 later requests. It achieved 84.59% accuracy and 0.8462 macro F1. A random-split robustness check produced 84.22% accuracy.
 
-## What did you try?
+#
 
-Four experiments are recorded in `reports/model_comparison.csv`:
+# The estimate is uncertain because the hidden test outcomes are unavailable and the historical `final\_team` label is a post-resolution outcome rather than an independently verified initial-routing ground truth.
 
-1. Word TF-IDF baseline — **0.8379 accuracy**
-2. Character TF-IDF — **0.8407 accuracy**
-3. Character TF-IDF + structured features — **0.8375 accuracy** in the experiment comparison; this is the shipped variant
-4. Stratified random-split robustness check — **0.8417 accuracy**
+#
 
-The primary reported production-validation result comes from the chronological holdout, where the shipped model reaches **0.8459 accuracy / 0.8462 macro F1**.
+# \---
 
-We also tested a hand-written policy override rule that force-routes payment-mentioning Billing predictions with fault language to Repairs.
+#
 
----
+# \## 3. How do you know it works? How you validated, on what split, error rate, and the kind of case it gets wrong.
 
-## What changed from the initial plan?
+#
 
-The architecture in the assignment brief assumes the classifier needs an explicit policy layer to enforce "payment mention ≠ billing."
+# I used chronological validation rather than relying only on a random train/test split. The model trained on 8,687 earlier requests and was evaluated on the subsequent 2,135-request holdout.
 
-In practice, once trained on `final_team` (the available post-resolution outcome) rather than `team_label`, the classifier already handles this scenario well. It achieves **88.98% accuracy on the payment-mention subset**, compared with **84.59% overall temporal-holdout accuracy**.
+#
 
-The policy layer was therefore scaled down accordingly: it is implemented, tested, and available in `src/policy.py`, but the hard override is **disabled by default** because it was evaluated and did not improve validation performance.
+# Results: 84.59% accuracy, 0.8462 macro F1, and 329/2,135 errors (15.4%). Per-team precision, recall, F1, and a confusion matrix were also generated. The implementation has 28 passing automated tests covering the API, prediction behavior, data handling, policy logic, confidence/review behavior, explanations, retrieval, and `predictions.csv`.
 
----
+#
 
-## What did you throw away?
+# The largest error category was genuinely insufficient-context requests, accounting for about 76% of holdout errors. Examples include requests such as "please call back regarding purifier", where the text does not contain enough information to reliably distinguish the correct team. The system therefore exposes confidence and a human-review flag rather than pretending these cases are certain.
 
-- The hard-coded payment → Repairs override rule: tested on the temporal holdout, it fired on only **1 of 2,135 requests** and got that one wrong, changing accuracy from **0.8459 → 0.8453**. It is kept in the codebase disabled, with the experiment covered by `tests/test_policy.py::test_hard_override_empirically_does_not_help_on_temporal_holdout`.
+#
 
-- A sentence-transformer embedding model for historical retrieval: no network access to a model hub was available in this environment, so retrieval runs on TF-IDF cosine similarity with automatic fallback logic already written for a sentence-transformer if one becomes available.
+# Repairs has the lowest precision at approximately 0.79, so it is an area I would monitor closely during a pilot.
 
-- Treating `team_label` as a usable structured feature: excluded because it represents the legacy bot's own routing decision and would not be an independent feature for a new incoming request once that bot is retired.
+#
 
----
+# \---
 
-## Expected hidden score / metric / why / estimate
+#
 
-The primary offline metric used for this project is **accuracy against `final_team` on a chronological holdout**, with macro F1 reported alongside it.
+# \## 4. Did you change, narrow, or push back on the client's ask? What, when, and why?
 
-The chronological split is:
+#
 
-- Training: **2025-04-01 to 2026-03-31 — 8,687 rows**
-- Holdout: **2026-04-01 to 2026-06-30 — 2,135 rows**
+# Yes. I pushed back on treating the original 90%+ match-rate requirement as an immediate go/no-go criterion.
 
-Observed temporal-holdout results:
+#
 
-- Accuracy: **84.59%**
-- Macro F1: **0.8462**
+# The supplied `team\_label` is the legacy bot's historical routing decision, while `final\_team` represents the team that ultimately closed the request. Optimizing only to match `team\_label` could reproduce the same routing behavior that the analysis shows has historically required transfers.
 
-The legacy bot's historical accuracy against the same `final_team` outcomes is **77.17%**.
+#
 
-The original assignment discussed a 90%+ threshold, but `team_label` is the legacy bot's own routing decision rather than an independent ground-truth label. Therefore, the 90% threshold should be revisited with the business team before being used as a go/no-go criterion.
+# I therefore trained and evaluated against `final\_team`, the available post-resolution outcome, and used chronological validation. The resulting 84.59% accuracy is below the original 90% threshold, so I did not claim that the threshold was achieved.
 
-**Expected hidden-score estimate:** approximately **mid-80% accuracy**, with **~84–85%** as the central estimate based on the chronological holdout.
+#
 
-This is an estimate, not a guarantee, because the hidden test distribution may differ from the validation period.
+# I narrowed the operational recommendation to a 1–2 week shadow-mode pilot with human review, followed by agreement on the final success metric and go/no-go threshold.
 
----
+#
 
-## Actual metrics
+# \---
 
-Temporal holdout:
+#
 
-- Accuracy: **0.8459**
-- Macro F1: **0.8462**
+# \## 5. What is wrong with what you are handing us, or with the data we handed you?
 
-Legacy bot against `final_team`:
+#
 
-- Accuracy: **0.7717**
-- Historical misroute rate: **22.83%**
+# The main data/measurement issue is that `team\_label` and `final\_team` represent different stages of the routing process. `team\_label` is the legacy bot's initial routing decision, while `final\_team` is the post-resolution destination, so neither should automatically be treated as an independently verified "correct initial route".
 
-Full per-team breakdown: `reports/per_team_metrics.csv`
+#
 
-Confusion matrix: `reports/confusion_matrix.png`
+# The historical dataset also contains genuinely low-information requests, which limits how accurately any text-based routing model can classify them.
 
-Error analysis: `reports/error_analysis.csv`
+#
 
----
+# I treated `resolution\_log.csv` as an evaluation/operations source rather than using resolution information as prediction features, to avoid leakage. Historical similarity retrieval is evidence shown to the user and is not used to determine the classifier's label.
 
-## How do you know it works?
+#
 
-The system was evaluated using a chronological holdout rather than relying only on a random split.
+# The supplied historical data covers approximately 15 months and one product-line setup, so performance on materially different future products, channels, or team definitions is unknown.
 
-The holdout contains requests from a later time period that were not used to train the validation model. The primary result is **84.59% accuracy / 0.8462 macro F1**.
+#
 
-The implementation is also covered by automated tests for:
+# I also did not include generated model binaries, private reports, or client data in the public repository.
 
-- text preprocessing
-- temporal split correctness
-- target-label sanity (`final_team` vs `team_label`)
-- policy-signal generation
-- empirical evaluation of the disabled hard override
-- predictor schema and validation
-- missing-field handling
-- retrieval fallback
-- FastAPI request/response behaviour
-- error cases
-- `predictions.csv` submission-artifact schema
+#
 
-The current suite contains **28 passing tests and 1 unrelated httpx/Starlette deprecation warning**.
+# \---
 
----
+#
 
-## Known gaps / failure modes
+# \## 6. What did you deliberately leave out, and why that rather than something else?
 
-- **76% of remaining holdout errors** are requests with genuinely insufficient information, such as "please call back regarding purifier." These cannot reliably be resolved from text alone.
-- **Repairs has the lowest precision at approximately 0.79**, making it a useful focus for targeted review during a pilot.
-- A small share of incorrect predictions are confidently wrong and therefore are not automatically sent to human review.
-- Confidence is bimodal rather than smoothly graded.
-- Historical retrieval currently uses TF-IDF rather than semantic embeddings in this environment.
-- Hosting, storage, monitoring and engineering-maintenance costs have not been sized because the target production environment has not yet been specified.
+#
 
----
+# I deliberately left out:
 
-## What changed or narrowed from the original ask?
+#
 
-The original ask proposed a 90%+ routing match threshold and described switching off the existing bot if that threshold was reached.
+# \- External LLM/API inference, because the assignment required a clean-machine workflow without a paid API key and the routing task can be handled locally.
 
-The project narrowed that decision because the supplied `team_label` is the legacy bot's own routing decision, while `final_team` records the eventual resolution team.
+# \- A hard payment-keyword override, because the operations policy says payment language alone does not imply Billing, and testing the override did not improve validation performance.
 
-The resulting recommendation is therefore:
+# \- Automatic production routing, because the validation result is below the original 90% threshold and a small number of predictions remain confidently wrong.
 
-1. Evaluate the new model against `final_team`.
-2. Run a shadow-mode pilot alongside the existing bot.
-3. Review human-review and high-confidence routing behaviour.
-4. Agree on the final business metric and go/no-go threshold before considering bot retirement.
+# \- Training on `resolution\_log` fields or other post-resolution information that would not be available at prediction time.
 
-The hard-coded payment policy was also narrowed from an active override to a tested, disabled-by-default policy layer because the empirical override test made validation performance slightly worse.
+# \- A sentence-transformer dependency for retrieval because the target environment did not have network access to download the model; the system falls back to TF-IDF cosine similarity.
 
----
+#
 
-## Handoff / data bugs / shortcuts / untrusted columns / bad rows
+# \---
 
-### Data / label issue
+#
 
-The most important data issue is that `train.csv`'s `team_label` is identical to `resolution_log.first_team` and represents the legacy bot's initial routing decision rather than an independent ground-truth label.
+# \## 7. Anything you built or found that nobody asked for?
 
-`resolution_log.final_team` was therefore used as the prediction target.
+#
 
-### Team renames
+# Yes. I added several supporting capabilities to make the system safer and easier to hand off:
 
-The supplied team taxonomy contains two historical renames effective **2026-01-15**:
+#
 
-- `Installations` → `Installs & Demo`
-- `Consumables` → `Filters & Consumables`
+# \- Confidence bands and an automatic human-review flag for lower-confidence predictions.
 
-These are canonicalized automatically.
+# \- Human-readable routing explanations.
 
-### Timestamp issue
+# \- Runner-up team and confidence.
 
-Resolution-log timestamps associated with legacy-Zoho rows are in UTC rather than IST. They are corrected in `src/ops_analytics.py` for analytics only and are not used as modelling features.
+# \- Similar historical requests as supporting evidence.
 
-### Encoding issue
+# \- An Operations Analytics view showing historical workload, transfer rates, estimated friction cost, monthly request volume, and resolution-time statistics.
 
-Approximately 4.4% of training rows contain legacy-Zoho mojibake/encoding corruption. Character TF-IDF was selected partly because it is more robust to spelling variation, abbreviations, and such text corruption.
+# \- A Model Performance view with temporal validation metrics, per-team metrics, confusion matrix, and error categories.
 
-### Untrusted / excluded column
+# \- An explicit model/data-leakage section documenting which fields are and are not used for prediction.
 
-`team_label` is explicitly excluded as a model feature because it represents the legacy bot's own routing decision and would reproduce the behaviour being evaluated.
+#
 
-### Shortcuts deliberately avoided
+# \---
 
-- No paid LLM/API calls.
-- No external inference dependency.
-- No use of `final_team` as an input feature.
-- No random-only validation as the primary evaluation.
-- No hard-coded payment keyword override in production inference.
+#
 
----
+# \## 8. What did you use AI for? Which tools and models, where they helped, where they wasted time, what you threw away. Link your three-minute screen recording here.
 
-## What did you deliberately leave out?
+#
 
-- No paid external LLM/API inference.
-- No automatic production replacement of the legacy bot.
-- No active payment → Repairs hard override.
-- No claim that the 90% threshold has been achieved.
-- No invented hosting or infrastructure cost.
-- No public repository upload of the supplied customer/operational CSV data.
-- No model dependence on `final_team` or other post-resolution information at prediction time.
-- No semantic embedding dependency for the default retrieval path.
+# I used Claude and ChatGPT as development assistants.
 
----
+#
 
-## What is the human-review policy?
+# Claude was used primarily for implementation assistance, including project structure, Python/API/UI code, tests, documentation, and debugging suggestions. ChatGPT was used primarily for architecture review, validation of the modeling approach, error-analysis reasoning, documentation review, and checking the submission against the assignment requirements.
 
-The system produces a prediction, confidence score, confidence band, runner-up team, human-readable reasons, and historical-similarity evidence.
+#
 
-Low-confidence requests are flagged for human review rather than being treated as equally reliable as high-confidence routes.
+# I reviewed and tested the generated code locally rather than treating AI output as trusted. I discarded or changed approaches when validation did not improve, including a hard payment-keyword override and approaches that risked reproducing the legacy routing labels. Retrieval also uses a TF-IDF fallback rather than depending on an unavailable downloaded embedding model.
 
-Approximately **8% of production test traffic** falls below the high-confidence band and is flagged for review.
+#
 
-Because some incorrect predictions can still be confidently wrong, the recommended pilot also includes a manual audit sample of high-confidence Repairs and Billing routes.
+# No paid AI/API inference was used by the submitted application.
 
----
+#
 
-## Money / cost
+# \*\*Screen recording:\*\* \[https://drive.google.com/drive/folders/1zBhvps_NLENol86lhXh9Kelhu0hpZ93c?usp=sharing]
 
-- **Paid inference cost:** **₹0/request**
-- **Legacy bot licence:** **₹3.2 lakh/year**
-- Hosting, storage, monitoring and engineering upkeep are real but deployment-dependent and have intentionally not been invented without a target environment.
+#
 
-The current bot's estimated misrouting friction is approximately **₹18.3 lakh over the last 15 months** (≈**₹14.7 lakh/year**) using the transfer-handling and extra-contact cost figures from the supplied operations policy.
+# \---
 
-If friction scales roughly with the observed relative reduction in routing errors, the model's approximately one-third relative error reduction implies an estimated **₹4.5–5 lakh/year** in avoided transfer/contact cost.
+#
 
-This is a rough estimate, not a guarantee, and should be re-checked after a live pilot.
+# \## 9. Someone picks this up on Monday and you are unreachable. The three things they need to know.
 
----
+#
 
-## One prediction cost + monthly ~₹700 arithmetic
+# 1\. \*\*Run and validate:\*\* activate the virtual environment, run `python -m pytest tests/`, then start the API with `uvicorn app.api:app --reload --port 8000` and the UI with `streamlit run app/ui.py`.
 
-The model uses no paid external inference API, so the direct paid inference cost is:
+#
 
-**₹0 per prediction.**
+# 2\. \*\*Do not treat 90% as achieved:\*\* the primary chronological holdout result is 84.59% accuracy / 0.8462 macro F1 against `final\_team`. The recommended next step is a 1–2 week shadow-mode pilot with human review.
 
-For the assignment's requested monthly-cost arithmetic:
+#
 
-**₹700/month × 12 months = ₹8,400/year**
+# 3\. \*\*Protect the data boundary:\*\* the files in `data/`, generated models/reports, and `predictions.csv` are intentionally gitignored. Do not publish the client data. Retrain/revalidate if the product mix, team definitions, or routing policy changes.
 
-This is an arithmetic planning example, not a measured production infrastructure cost.
+#
 
-The actual hosting, storage, monitoring and engineering cost depends on the final deployment environment and should be priced before production cutover.
+# \---
 
----
+#
 
-## Monday handoff — 3 things
+# \## 10. Honest hours spent
 
-1. Run a **1–2 week shadow-mode pilot** alongside the existing bot without acting on the new model's predictions.
-2. Have Meenal's team **spot-check high-confidence Repairs and Billing routes** and review automatically flagged low-confidence requests.
-3. Decide the **production hosting/monitoring setup** and agree with Ritu/Tanmay on the final success metric and go/no-go threshold before considering bot retirement.
+#
 
----
+# 12 hours
 
-## AI use / tools / models / help / discarded work
+#
 
-AI tools were used during development for implementation assistance, debugging, documentation drafting, code review, and reasoning about model architecture and evaluation.
+# \---
 
-The primary AI tools used were **Claude and ChatGPT**.
+#
 
-The final routing model itself does **not** depend on an external LLM or paid API.
+# \## 11. GitHub Repo Link
 
-The modelling stack is local:
+#
 
-- Python
-- pandas
-- scikit-learn
-- Character TF-IDF
-- LinearSVC
-- calibrated probabilities
-- FastAPI
-- Streamlit
-- pytest
+# https://github.com/Adro05/kernel-routing
 
-AI-assisted/discarded work included:
+#
 
-- evaluation of the explicit payment-routing override
-- exploration of semantic sentence-transformer retrieval
-- implementation and testing of the policy layer
-- review of model-validation methodology
-- documentation and submission-material drafting
+# \---
 
-The payment override was empirically tested and disabled. Sentence-transformer retrieval was not used as the default because the environment could not download the model from the model hub.
+#
 
-No paid model/API calls were made.
+# \## 12. What does one prediction cost, and what would a month cost at Kestrel's volume? Show the arithmetic. If you used no paid calls, say so.
 
-The screen recording will disclose the AI-assisted development workflow and the approaches that were tried and discarded.
+#
 
----
+# Paid inference cost: ₹0 per prediction. The submitted model runs locally and does not make external LLM/API calls.
 
-## Extra
+#
 
-The project deliberately keeps the prediction path and operations analytics separate.
+# At approximately 700 requests/month:
 
-`resolution_log.csv` is used for historical outcome analysis, transfer-friction analysis, and operations visibility, but post-resolution information is not fed into the model as an input feature.
+#
 
-The service exposes the same prediction path through FastAPI and Streamlit so that the demonstrated UI and JSON endpoint do not contain separate routing logic.
+# ₹0 × 700 = ₹0/month in paid inference/API charges.
 
----
+#
 
-## Screen recording
+# The assignment also asks for the ₹700/month planning arithmetic:
 
-**Recording link:** `[ADD RECORDING LINK]`
+#
 
-The recording will cover:
+# ₹700/month × 12 = ₹8,400/year.
 
-1. What was tried.
-2. What changed after inspecting the data.
-3. Why `final_team` was used instead of `team_label`.
-4. What was tested and discarded.
-5. The working API/UI.
-6. The validation result and limitations.
-7. The final business decision.
+#
 
----
+# This ₹8,400 figure is a planning/example figure requested by the assignment, not a measured production hosting cost. Actual hosting, storage, monitoring, and engineering maintenance costs depend on the deployment environment and have not been estimated without a target environment.
 
-## Public Drive link
+#
 
-**Public Drive / submission link:** `[ADD PUBLIC DRIVE LINK]`
+# \---
 
----
+#
 
-## Honest development time
+# \## 13. Public Drive / final submission link
 
-**Approximate hands-on development time:** `[ADD HOURS]`
+#
 
-This should reflect the actual time spent on implementation, testing, debugging, evaluation, documentation, and submission preparation.
-
----
-
-## GitHub
-
-**Repository:** https://github.com/Adro05/kernel-routing
-
-The repository does not contain the supplied client CSV data, generated model artifacts, or the client-data-derived `predictions.csv`.
-
----
-
-## How to reproduce
-
-See `README.md` → **Installation** and **Running Instructions**.
-
-The intended workflow is:
-
-```bash
-python -m src.train
-python -m src.evaluate
-python -m src.error_analysis
-python -m src.predict
-pytest tests/ -v
+# \[https://drive.google.com/drive/folders/1zBhvps_NLENol86lhXh9Kelhu0hpZ93c?usp=sharing]
