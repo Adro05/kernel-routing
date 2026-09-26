@@ -1,1 +1,15 @@
-# Dependencies will be finalized after implementation.
+pandas>=2.0
+numpy>=1.24
+scikit-learn>=1.3
+scipy>=1.10
+matplotlib>=3.7
+joblib>=1.3
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.0
+streamlit>=1.32
+pytest>=8.0
+httpx>=0.27
+
+# Optional (retrieval falls back to TF-IDF automatically if unavailable):
+# sentence-transformers>=2.6

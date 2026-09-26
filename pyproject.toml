@@ -1,5 +1,17 @@
 [project]
 name = "kestrel-routing"
-version = "0.1.0"
-description = "Kestrel service-request routing intelligence system"
+version = "1.0.0"
+description = "Local routing-intelligence system for Kestrel Home service requests."
 requires-python = ">=3.10"
+readme = "README.md"
+
+# Dependencies are pinned/listed in requirements.txt (pip install -r requirements.txt).
+# This file exists for editor/tooling metadata (e.g. pytest, IDE project roots) and does
+# not replace requirements.txt as the source of truth for installable dependencies.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools]
+packages = ["app", "src"]
