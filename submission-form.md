@@ -98,29 +98,20 @@
 
 #
 
-# The main data/measurement issue is that `team\_label` and `final\_team` represent different stages of the routing process. `team\_label` is the legacy bot's initial routing decision, while `final\_team` is the post-resolution destination, so neither should automatically be treated as an independently verified "correct initial route".
+# The supplied data was not treated as clean. I found and corrected several source-data issues in code.
+
+- team_label contains 9 historical team names because Installations was renamed to Installs & Demo and Consumables to Filters & Consumables on 15 Jan 2026. I canonicalized both old names to the current seven-team taxonomy before evaluation and training.
+- 480 rows (4.4% of the training data) contain mojibake/encoding corruption from the legacy Zoho migration. I repaired only the specific observed patterns rather than applying a broad automatic re-encoding that could damage clean CRM text.
+- Request text is normalized by collapsing repeated whitespace, stripping surrounding whitespace, and handling non-string values safely. Missing structured feature values are represented explicitly as "missing".
+- train.csv and resolution_log.csv were verified to have a 1:1 relationship on request_id; the code asserts that the merge does not change the training row count.
+- For operations analytics, legacy-Zoho resolution timestamps were stored in UTC while the surrounding timestamps were in IST. I corrected those legacy timestamps by +5:30 only for resolution-time analytics and suppressed negative calculated durations. This correction is not used by the routing model.
+
+The main measurement issue is that team_label and final_team represent different stages of the process. team_label is the legacy bot's initial routing decision, while final_team is the post-resolution destination. I therefore used final_team as the prediction target rather than training the replacement to reproduce the incumbent bot.
+
+I also excluded post-resolution information (transfers, resolved_at) and team_label from prediction features to prevent leakage. The supplied data contains genuinely low-information requests, which limits what any text-based model can infer.
 
 #
 
-# The historical dataset also contains genuinely low-information requests, which limits how accurately any text-based routing model can classify them.
-
-#
-
-# I treated `resolution\_log.csv` as an evaluation/operations source rather than using resolution information as prediction features, to avoid leakage. Historical similarity retrieval is evidence shown to the user and is not used to determine the classifier's label.
-
-#
-
-# The supplied historical data covers approximately 15 months and one product-line setup, so performance on materially different future products, channels, or team definitions is unknown.
-
-#
-
-# I also did not include generated model binaries, private reports, or client data in the public repository.
-
-#
-
-# \---
-
-#
 
 # \## 6. What did you deliberately leave out, and why that rather than something else?
 
@@ -194,7 +185,7 @@
 
 #
 
-# \*\*Screen recording:\*\* \[https://drive.google.com/drive/folders/1zBhvps_NLENol86lhXh9Kelhu0hpZ93c?usp=sharing]
+# **Screen recording:** https://drive.google.com/drive/folders/1zBhvps_NLENol86lhXh9Kelhu0hpZ93c?usp=sharing
 
 #
 
@@ -282,4 +273,4 @@
 
 #
 
-# \[https://drive.google.com/drive/folders/1zBhvps_NLENol86lhXh9Kelhu0hpZ93c?usp=sharing]
+# **Screen recording:** https://drive.google.com/drive/folders/1zBhvps_NLENol86lhXh9Kelhu0hpZ93c?usp=sharing
